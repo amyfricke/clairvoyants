@@ -1,0 +1,14 @@
+numpy>=1.15.4
+pandas>=1.0.4
+pandasql>=0.7.3
+matplotlib>=2.0.0
+re
+inspect
+random
+math
+statsmodels>=0.11.0
+pmdarima>=1.8.3
+prophet>=1.0.1
+scipy>=1.5.0
+sklearn
+dateutil
