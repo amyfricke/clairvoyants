@@ -607,6 +607,7 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
   plt.rc('legend', fontsize=13)
   plt.rc('ytick', labelsize=18)
   plt.rc('xtick', labelsize=18)
+  plt.xticks(rotation = 30)
   ax.yaxis.set_major_formatter(FuncFormatter(human_format))
 
   dt_series = a.dt.copy()
@@ -653,6 +654,7 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
      
         ap[-1][0].set_linestyle(':')
         ap[-1][0].set_linewidth(2.5)
+      
       
         a_upper = a_lower.copy()
  
@@ -711,7 +713,7 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
                           ecolor=cur_col)
         ap[-1][0].set_linestyle(':')
         ap[-1][0].set_linewidth(2.5)
-
+        
         
         ap = plt.fill_between(dt_series, 
                               a_upper_neg, a_lower_neg,
@@ -745,4 +747,262 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
   plt.grid()
   
   return ap
+
+def plot_attributions2(a, a_display=None, title=None, ylabel='',
+                      conf_level=0.95):
+  """Produce a plot of the ensemble forecasts
+
+      
+  Returns
+  ----------
+  plt object
+
+  """
+
+  a = a.reset_index(drop=True)
+  if type(a) is not pd.core.frame.DataFrame:
+    raise Exception('a, the attribution dataframe must be pandas.')
+
+  if not set(['dt', 'actual']).issubset(set(a.columns)):
+    raise Exception('a must contain columns "dt" and "actual"')
+    
+  if a_display is None:
+    a_display = {}
+    for col in list(set(a.columns) - set(['dt', 'total'])):
+      a_display[col] = [col]
+   
+  if title is None:
+    title = 'Model predicted attributions of various factors'
+
+  
+  fig, ax = plt.subplots(figsize=(15, 9))
+  fig.suptitle(title, fontsize=24)
+  plt.xlabel('datetime', fontsize=20)
+  plt.ylabel(ylabel, fontsize=20)
+  plt.rc('legend', fontsize=13)
+  plt.rc('ytick', labelsize=18)
+  plt.rc('xtick', labelsize=18)
+  plt.xticks(rotation = 30)
+  ax.yaxis.set_major_formatter(FuncFormatter(human_format))
+
+  dt_series = a.dt.copy()
+  a_upper = a.actual.copy()
+  a_lower = a.actual.copy()
+  a_upper_neg = None
+  a_lower_neg = None
+  a_lower_pos = None
+  a_upper_pos = None
+
+  
+  for a_key in a_display.keys():
+    a_series = a[a_display[a_key][0]]
+    a_se = a[a_display[a_key][0] + '_var']
+    
+    for a_col in a_display[a_key][1:]:
+      a_series += a[a_col]
+      a_se += a[a_col + '_var']
+    
+    a_se = np.sqrt(a_se)
+    
+    a_pos = (a_series > 0)
+    a_neg = (a_series < 0)
+    
+    if a_pos.sum() > 0:
+      
+      a_nonneg = (a_series >= 0)
+      
+      if a_nonneg.sum() == len(a_series):
+        a_lower.loc[a_pos] = a_lower.loc[a_pos] - a_series.loc[a_pos]
+          
+        ap = plt.fill_between(dt_series, 
+                              a_upper,
+                              a_lower,
+                              label=a_key + ' driven', alpha=0.5)
+                      
+      
+      
+        a_upper = a_lower.copy()
+ 
+    
+    if a_neg.sum() > 0:
+
+      if a_upper_neg is None and a_lower_neg is None:
+        a_upper_neg = pd.Series([0] * len(a_series))
+        a_lower_neg = pd.Series([0] * len(a_series))
+        a_lower_neg.loc[a_neg] = a_series.loc[a_neg]
+
+        
+      else:
+        a_lower_neg.loc[a_neg] = a_lower_neg.loc[a_neg] + a_series.loc[a_neg]
+        
+        
+      a_nonpos = (a_series <= 0)
+      if a_nonpos.sum() == len(a_series):
+        
+        ap = plt.fill_between(dt_series, 
+                              a_upper_neg, a_lower_neg,
+                              label=a_key + ' driven', alpha=0.5)
+                            
+
+      
+      else:
+        cur_col = next(plt.gca()._get_lines.prop_cycler)['color']
+        
+        if a_upper_pos is None and a_lower_pos is None:
+          a_upper_pos = pd.Series([0] * len(a_series))
+          a_lower_pos = pd.Series([0] * len(a_series))
+          a_upper_pos.loc[a_pos] = a_series.loc[a_pos]
+          
+        else:
+          a_upper_pos.loc[a_pos] = a_upper_pos.loc[a_pos] + a_series[a_pos]
+         
+        ap = plt.fill_between(dt_series, 
+                              a_upper_pos, a_lower_pos,
+                              label=a_key + ' driven', alpha=0.5,
+                              color=cur_col)
+                            
+        
+        
+        ap = plt.fill_between(dt_series, 
+                              a_upper_neg, a_lower_neg,
+                              color=cur_col, alpha=0.5)
+                            
+        
+        a_lower_pos = a_upper_pos.copy()
+
+      
+      a_upper_neg = a_lower_neg.copy()
+
+    
+  if a_upper_pos is None:
+    a_lower = [0] * len(a.total)
+  else:
+    a_lower = a_upper_pos
+ 
+  ap = plt.fill_between(dt_series, a_lower, a_upper,
+                        color='grey',
+                        label = 'other/unknown', alpha=0.35)
+  
+     
+  plt.legend(loc='upper left', ncol=2, framealpha=0.02)
+  plt.grid()
+  
+  return ap
+
+
+def plot_pre_post_actuals_forecast(e, title=None, ylabel='', 
+                                   use_aggregated=False,
+                                   include_pred_int=True,
+                                   pre_period=14,
+                                   post_period=30,
+                                   dt_unit_str='Days'):
+  """Produce a plot of the pre and post period using the forecast as a bench
+    mark.
+
+      
+  Returns
+  ----------
+  plt object
+
+  """
+  if e.forecast['consensus'] is None:
+    raise Exception('No forecast found.')
+       
+  if title is None and e.validation['consensus'] is not None:
+    title = 'Pre and post analysis: actuals vs forecast'
+
+  if title is None and e.validation['consensus'] is None:
+    title = 'Training and forecast'
+  
+  fig, ax = plt.subplots(figsize=(15, 9))
+  fig.suptitle(title, fontsize=24)
+  plt.xlabel('date', fontsize=20)
+  plt.ylabel(ylabel, fontsize=20)
+  plt.rc('legend', fontsize=18)
+  plt.rc('ytick', labelsize=18)
+  plt.rc('xtick', labelsize=18)
+  plt.xticks(rotation = 30)
+  
+  ax.yaxis.set_major_formatter(FuncFormatter(human_format))
+  #ax2 = ax.twiny()
+  #ax2.set_xlabel(dt_unit_str + " since launch")
+  #ax2.set_xticks(list(range(-1 * pre_period, post_period)))
+   
+  if (len(e.periods_agg) > 0 and max(e.periods_agg) > 1 and
+      use_aggregated):
+    
+    agg_str = 'period' + str(max(e.periods_agg))
+    pre_start = e.training['aggregated'][agg_str].shape[0] - pre_period
+    fp = plt.plot(e.training['aggregated'][agg_str].dt.iloc[pre_start:],
+                  e.training['aggregated'][agg_str].actual.iloc[pre_start:], 
+                  label='actuals pre period', linewidth=4)
+    history_len = e.training['aggregated'][agg_str].shape[0]
+    
+    if include_pred_int:
+      fp = plt.fill_between(e.forecast['consensus'].dt.iloc[:post_period],
+                            e.forecast['consensus'].forecast_lower.iloc[
+                                :post_period],
+                            e.forecast['consensus'].forecast_upper.iloc[
+                                :post_period],
+                            color='indianred',
+                            label = str(round(e.pred_level * 100)) + 
+                            '% prediction interval', alpha=0.2) 
+      
+    total_len = history_len + e.forecast['consensus'].shape[0]  
+    fp = plt.plot(e.forecast['consensus'].dt.iloc[:post_period],
+                  e.forecast['consensus'].forecast.iloc[:post_period], 
+                  label='forecast', 
+                  linewidth=2 + 2 * int(total_len < 400),
+                  c='indianred')
+
+      
+    if (e.validation['consensus'] is not None and 
+        len(e.validation['consensus']) > 0):
+      fp = plt.plot(e.validation['consensus'].dt.iloc[:post_period],
+                    e.validation['consensus'].actual.iloc[:post_period], 
+                    label='actuals post period', c='mediumseagreen', 
+                    linewidth=2 + 2 * int(total_len < 400), alpha=0.7)
+      plt.axvline(x=min(e.forecast['consensus'].dt), color='grey',
+                  linestyle='--', linewidth=5, label='launch')
+    
+  else:
+    pre_start = e.training['history'].shape[0] - pre_period
+    fp = plt.plot(e.training['history'].dt.iloc[pre_start:],
+                  e.training['history'].actual.iloc[pre_start:],
+                  label='actuals pre period', 
+                  linewidth=2 + 2 * int(pre_period < 400))
+    history_len = pre_period
+    
+    forecast_df = e.forecast['disaggregated']['period1']
+    if include_pred_int:
+      fp = plt.fill_between(forecast_df.dt.iloc[:post_period],
+                            forecast_df.forecast_lower.iloc[:post_period],
+                            forecast_df.forecast_upper.iloc[:post_period],
+                            color='indianred',
+                            label = str(round(e.pred_level * 100)) + 
+                            '% prediction interval', alpha=0.2)
+      
+    total_len = history_len + e.forecast['consensus'].shape[0]  
+    fp = plt.plot(forecast_df.dt.iloc[:post_period],
+                  forecast_df.forecast.iloc[:post_period],
+                  label='forecast', 
+                  linewidth=2 + 2 * int(total_len < 400),
+                  c='indianred')
+    #ax.set_xticks(list(e.training['history'].dt.iloc[pre_start:]) + 
+    #              list(forecast_df.dt.iloc[:post_period]))
+    if (e.validation['disaggregated'] is not {} and 
+        len(e.validation['disaggregated']) > 0):
+      validation_df = e.validation['disaggregated']['period1']
+      fp = plt.plot(validation_df.dt.iloc[:post_period],
+                    validation_df.actual.iloc[:post_period], 
+                    label='actuals post period', c='mediumseagreen', 
+                    linewidth=2 + 2 * int(total_len < 400), alpha=0.7)
+      
+      plt.axvline(x=min(forecast_df.dt), color='grey', linestyle='--', 
+                  linewidth=5, label='launch')
+
+  plt.legend(loc='upper left', ncol=2)
+  plt.grid()
+  
+  return fp
 
