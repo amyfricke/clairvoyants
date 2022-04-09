@@ -295,7 +295,7 @@ class Clairvoyant(object):
   
     consensus_df = ensemble_att_df.groupby('dt').aggregate(consensus_dict)
     
-    consensus_df.reset_index(drop=True)
+    consensus_df.reset_index()
     consensus_df = _back_transform_df(consensus_df, transform, 
                                       cols_transform=cols_att)
     return consensus_df
@@ -351,7 +351,7 @@ class Clairvoyant(object):
                                           self.forecast['dt_span'])
     ensemble_df = pd.DataFrame() 
     ensemble_att_df = pd.DataFrame()
-    print(self.training['transformed'].describe())
+    
     for model in self.models:
       model_str = str(model.__name__)  
       model_rslts = model(
@@ -690,5 +690,28 @@ class Clairvoyant(object):
     
     self.validation['consensus'] = consensus_df
     
+    if self.forecast['disaggregated'] != {}:
+      disagg_fcst = self.forecast['disaggregated']['period1']
+      history_mask = (df.dt >= min(disagg_fcst.dt))
+      disagg_consensus_df = pd.concat(
+          [df.drop(['dt'], axis=1).loc[history_mask,:].reset_index(
+              drop=True),  disagg_fcst.reset_index(drop=True)],
+          axis=1)
+
+      disagg_consensus_df.dropna()
+    
+      disagg_consensus_df['error'] = (( disagg_consensus_df['forecast'] 
+                                      -  disagg_consensus_df['actual'])
+                                      /  disagg_consensus_df['actual'])
+      disagg_consensus_df['abs_error'] = np.abs(disagg_consensus_df['error'])
+    
+      disagg_consensus_df['pred_int_coverage'] = ((
+          disagg_consensus_df['actual'] >=  
+          disagg_consensus_df['forecast_lower']) & (
+              disagg_consensus_df['actual'] <=  
+              disagg_consensus_df['forecast_upper']))
+    
+      self.validation['disaggregated']['period1'] = disagg_consensus_df
+    
     return self
-  
+
