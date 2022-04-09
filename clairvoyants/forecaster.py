@@ -295,7 +295,7 @@ class Clairvoyant(object):
   
     consensus_df = ensemble_att_df.groupby('dt').aggregate(consensus_dict)
     
-    consensus_df.reset_index()
+    consensus_df = consensus_df.reset_index(inplace=True)
     consensus_df = _back_transform_df(consensus_df, transform, 
                                       cols_transform=cols_att)
     return consensus_df
