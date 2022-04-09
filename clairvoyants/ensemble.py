@@ -187,7 +187,7 @@ def auto_sarimax(history,
   Dict containing dataframes for the model coefficients/summary and the 
    backtransformed forecast.""" 
    
-  model_dict= _process_features(
+  model_dict = _process_features(
       history, scale_history=False, diff_history=False,
       dt_span=dt_span, dt_units=dt_units, 
       periods=periods, periods_agg=periods_agg, periods_trig=periods_trig,
@@ -374,7 +374,7 @@ def auto_scarf_nnet(history,
           'coefficients':None,
           'summary':None,
           'residuals':model_residuals,
-          'attributions':model_attributions}
+          'attributions':None}
 
 
 def prophet_linear_lt(history,
