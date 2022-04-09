@@ -290,10 +290,9 @@ class Clairvoyant(object):
   
     consensus_dict = {}
     cols_att = ensemble_att_df.columns[ensemble_att_df.columns != 'dt']
-    for att_col in ensemble_att_df.columns:
+    for att_col in cols_att:
       consensus_dict[att_col] = consensus_method
   
-    
     consensus_df = ensemble_att_df.groupby('dt').aggregate(consensus_dict)
     
     consensus_df.reset_index(drop=True)
