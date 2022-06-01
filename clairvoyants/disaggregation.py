@@ -60,6 +60,10 @@ def prepare_history_to_disaggregate(history,
   
       dummy_p = pd.concat([dummy_p.reset_index(drop=True),
                            dummy_interact.reset_index(drop=True)], axis=1)
+  
+  elif x_reg is None:
+    dummy_p = pd.get_dummies(hist['p'].reset_index(drop=True))
+    x_reg = hist['p']
         
   hist = pd.concat([hist.reset_index(drop=True),
                     x_reg.reset_index(drop=True),
@@ -118,6 +122,10 @@ def prepare_forecast_to_disaggregate(forecast_dates_disaggregated,
                 x_future[x_col].reset_index(drop=True), axis=0)
       dummy_p = pd.concat([dummy_p.reset_index(drop=True),
                            dummy_interact.reset_index(drop=True)], axis=1)
+      
+  elif x_future is None:
+    dummy_p = pd.get_dummies(fcst['p'].reset_index(drop=True))
+    x_future = fcst['p']
         
   fcst = pd.concat([fcst.reset_index(drop=True),
                     x_future.reset_index(drop=True), 
