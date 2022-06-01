@@ -165,27 +165,34 @@ def disaggregate_forecast(history,
   -------
   pd data frame containing the disaggregated forecast and prediction 
   intervals"""
-  
+  if x_reg is not None:
+    x_reg_p = x_reg.reset_index()
+  else: 
+    x_reg_p = x_reg
   hist = prepare_history_to_disaggregate(history, aggregated_history,
                                          period_agg, 
-                                         x_reg.reset_index(),
+                                         x_reg_p,
                                          x_cols_seasonal_interactions)
   forecast_dates_disaggregated =  pd.to_datetime(pd.bdate_range(
       str(max(history.dt) + _datetime_delta(period_disagg, dt_units)),
       max(aggregated_forecast.dt),
       freq=str(period_disagg) + dt_units))
   
+  if x_future is not None:
+    x_future_p = x_future.reset_index()
+  else: 
+    x_future_p = x_future
   fcst = prepare_forecast_to_disaggregate(forecast_dates_disaggregated,
                                           aggregated_forecast,
                                           period_agg,
-                                          x_future.reset_index(),
+                                          x_future_p,
                                           x_cols_seasonal_interactions)
   
   per_dummies = ['p_' + str(p) for p in range(1, period_agg)]
   per_interactions = [x_col + '_x_p_' + str(p) 
                       for x_col in x_cols_seasonal_interactions
                       for p in list(range(1, period_agg))]
-  print(per_interactions)
+  
   if x_reg is not None and x_future is not None:
     x_cols = list(x_reg.columns)
   else:
