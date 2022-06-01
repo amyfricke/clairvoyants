@@ -43,6 +43,8 @@ def prepare_history_to_disaggregate(history,
   hist['aggregated_actual'] = np.repeat(list(aggregated_history.actual),
                                         period_agg)
   hist['proportion_aggregated'] = hist.actual / hist.aggregated_actual
+  hist['proportion_aggregated'] = np.minimum(
+    1-1e-6, np.maximum(1e-6, hist['proportion_aggregated']))
   hist['p'] = list(range(1, period_agg + 1)) * int(hist.shape[0] / period_agg)
    
   hist['logit_proportion_aggregated'] = np.log(
@@ -196,10 +198,16 @@ def disaggregate_forecast(history,
   else:
     x_cols = []
 
-  arima002_disagg_model = ARIMA(
-      hist.set_index('dt').logit_proportion_aggregated, order=(0, 0, 2),
-      exog=hist.set_index('dt')[x_cols + per_dummies + per_interactions],
-      freq=str(period_disagg) + dt_units)
+  try:
+    arima002_disagg_model = ARIMA(
+        hist.set_index('dt').logit_proportion_aggregated, order=(0, 0, 2),
+        exog=hist.set_index('dt')[x_cols + per_dummies + per_interactions],
+        freq=str(period_disagg) + dt_units)
+  except:
+    arima002_disagg_model = ARIMA(
+        hist.set_index('dt').logit_proportion_aggregated, order=(0, 0, 0),
+        exog=hist.set_index('dt')[x_cols + per_dummies + per_interactions],
+        freq=str(period_disagg) + dt_units)
   
   arima002_disagg_fit = arima002_disagg_model.fit()
   disagg_model_summary = arima002_disagg_fit.summary()
