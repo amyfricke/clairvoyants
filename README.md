@@ -11,7 +11,7 @@ Clairvoyant is a package for modeling and/or forecasting time series data based 
 ## Installation
 
 ```shell
-pip install clairvoyant 
+pip install git+https://github.com/amyfricke/clairvoyants.git
 ```
 
 ### Example usage
