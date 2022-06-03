@@ -791,7 +791,8 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
                               a_lower,
                               label=a_key + ' driven', 
                               color=[cur_col],
-                              alpha=0.5)
+                              alpha=0.5, 
+                              edgecolor=None)
                       
         ap = plt.errorbar(dt_series.loc[a_pos], 
                           a_upper.loc[a_pos], 
@@ -800,7 +801,8 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
                           label=(a_key + ' ' + str(round(100 * conf_level))
                                 + '% CI'),
                           linewidth=0,
-                          ecolor=[cur_col], edgecolor=None)
+                          ecolor=[cur_col],
+                          edgecolor=None)
      
         ap[-1][0].set_linestyle(':')
         ap[-1][0].set_linewidth(2.5)
@@ -868,7 +870,7 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
         
         ap = plt.fill_between(dt_series, 
                               a_upper_neg, a_lower_neg,
-                              color=[cur_col], alpha=0.5)
+                              color=[cur_col], alpha=0.5, edgecolor=None)
                             
         ap = plt.errorbar(dt_series.loc[a_neg], 
                           a_lower_neg.loc[a_neg], 
