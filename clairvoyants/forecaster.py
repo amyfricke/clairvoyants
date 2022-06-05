@@ -116,7 +116,7 @@ class Clairvoyant(object):
     if 'dt' not in df.columns:
       raise Exception(df_name + ' must have column "dt"')
     
-    if search('timestamp', str(type(df['dt'][0])).lower()) is None:
+    if search('timestamp', str(type(df['dt'].iloc[0])).lower()) is None:
       raise Exception(df_name + ' column "dt" must be a timestamp.')
      
     if dt_span is not None:
