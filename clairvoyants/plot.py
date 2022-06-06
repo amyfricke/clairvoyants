@@ -755,6 +755,8 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
   plt.rc('xtick', labelsize=18)
   ax.yaxis.set_major_formatter(FuncFormatter(human_format))
 
+
+  max_pt = max(a.actual) * 1.1
   dt_series = a.dt.copy()
   a_upper = a.actual.copy()
   a_lower = a.actual.copy()
@@ -897,6 +899,7 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
                         edgecolor=None)
   
      
+  ap = plt.axhline(max_pt, linewidth=0)
   plt.legend(loc='upper left', ncol=2, framealpha=0.02)
   plt.grid()
   
