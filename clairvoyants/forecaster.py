@@ -351,6 +351,14 @@ class Clairvoyant(object):
                                           self.forecast['dt_span'])
     ensemble_df = pd.DataFrame() 
     ensemble_att_df = pd.DataFrame()
+    if self.training['x_features'] is None:
+      x_features_training = None
+      x_features_forecast = None
+    else:
+      x_features_training = self.training['x_features'][
+              'ensemble'].set_index('dt')
+      x_features_forecast = self.forecast['x_features'][
+              'ensemble'].set_index('dt')
     
     for model in self.models:
       model_str = str(model.__name__)  
@@ -358,8 +366,8 @@ class Clairvoyant(object):
           self.training['transformed'], self.forecast['dt_span'],
           self.dt_units, self.periods, self.periods_agg, self.periods_trig,
           self.pred_level, self.transform, 
-          self.training['x_features']['ensemble'].set_index('dt'), 
-          self.forecast['x_features']['ensemble'].set_index('dt'),
+          x_features_training, 
+          x_features_forecast,
           self.holidays_df,
           x_cols_seasonal_interactions)
 
@@ -497,116 +505,6 @@ class Clairvoyant(object):
 
     return self
 
-  def get_out_of_time_validation(self, df):
-    """Set the validation data: crop the df to the forecast dts and aggregate
-     if directed to and then compute validation statistics on the available
-     out of time validation data (that spans all or part of the forecast 
-     period).
-
-    Parameters
-    ----------
-    df: pd dataframe containing columns for dt datetime and actual, the 
-        timeseries being forecasted
-    x_features: pd dataframe containing columns for dt datetime and any 
-        external regressors to be used in fitting the ensemble
-    forecast_end_dt: the desired end dt of the forecast period 
-        
-    Returns
-    ----------
-    A clairvoyant object updated with the desired validation set and set the 
-      aggregated x_features to be used in the ensemble forecast
-
-    """
-    self._validate_df(df)
-    df = df.sort_values('dt')
-    
-    if self.forecast['dt_span'] is None:
-      raise Exception('Forecast period not set.')
-      
-    
-    validation_mask = ((df['dt'] >= self.forecast['dt_span']['begin_dt']) &
-                       (df['dt'] <= self.forecast['dt_span']['end_dt']))
-    validation_df = df.loc[validation_mask]
-
-    aggregated = _aggregate_and_transform(
-        validation_df, self.periods_agg, self.agg_fun, 
-        transform='none')
-    self.validation['consensus'] = aggregated['transformed']
-    
-    if self.forecast['ensemble'] is {}:
-      raise Exception('No forecast ensemble found')
-      
-    for model in self.models:
-      model_str = str(model.__name__)
-      model_df = pd.concat(
-          [self.validation['consensus'].drop(
-              ['dt'], axis=1).reset_index(drop=True), 
-           self.forecast['ensemble'][model_str].reset_index(drop=True)],
-          axis=1)
-      model_df.dropna()
-      
-      model_df['error'] = ((model_df['forecast'] - model_df['actual'])
-                           / model_df['actual'])
-      model_df['abs_error'] = np.abs(model_df['error'])
-      
-      model_df['pred_int_coverage'] = ((model_df['actual'] 
-                                        >= model_df['forecast_lower']) &
-                                       (model_df['actual']
-                                       <= model_df['forecast_upper']))
-      
-      self.validation['ensemble'][model_str] = model_df
-    
-    if self.forecast['consensus'] is None:
-      raise Exception('No consensus forecast found.')
-
-    consensus_df = pd.concat(
-        [self.validation['consensus'].drop(
-            ['dt'], axis=1).reset_index(drop=True), 
-         self.forecast['consensus'].reset_index(drop=True)],
-        axis=1)
-
-    consensus_df.dropna()
-    
-    consensus_df['error'] = ((consensus_df['forecast'] 
-                              - consensus_df['actual'])
-                           / consensus_df['actual'])
-    consensus_df['abs_error'] = np.abs(consensus_df['error'])
-    
-    consensus_df['pred_int_coverage'] = ((consensus_df['actual'] 
-                                        >= consensus_df['forecast_lower']) &
-                                       (consensus_df['actual']
-                                        <= consensus_df['forecast_upper']))
-    
-    self.validation['consensus'] = consensus_df
-    
-    if self.forecast['disaggregated'] != {}:
-      disagg_fcst = self.forecast['disaggregated']['period1']
-      history_mask = (df.dt >= min(disagg_fcst.dt))
-      disagg_consensus_df = pd.concat(
-          [df.drop(['dt'], axis=1).loc[history_mask,:].reset_index(
-              drop=True),  disagg_fcst.reset_index(drop=True)],
-          axis=1)
-
-      disagg_consensus_df.dropna()
-    
-      disagg_consensus_df['error'] = (( disagg_consensus_df['forecast'] 
-                                      -  disagg_consensus_df['actual'])
-                                      /  disagg_consensus_df['actual'])
-      disagg_consensus_df['abs_error'] = np.abs(disagg_consensus_df['error'])
-    
-      disagg_consensus_df['pred_int_coverage'] = ((
-          disagg_consensus_df['actual'] >=  
-          disagg_consensus_df['forecast_lower']) & (
-              disagg_consensus_df['actual'] <=  
-              disagg_consensus_df['forecast_upper']))
-    
-      self.validation['disaggregated']['period1'] = disagg_consensus_df
-    
-    return self
-  
-  
-
-    return self
 
   def get_out_of_time_validation(self, df):
     """Set the validation data: crop the df to the forecast dts and aggregate
