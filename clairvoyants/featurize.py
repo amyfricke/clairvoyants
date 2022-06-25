@@ -330,7 +330,7 @@ def _process_features(history, scale_history=False, diff_history=False,
               [holiday_features['future'].reset_index(drop=True),
                holiday_features_fut_inter.reset_index(drop=True)], axis=1)
       
-      if (x_reg_l is not None and x_future_l is not None):
+      if (x_reg is not None and x_future is not None):
             
         holiday_features['past'].index = x_reg_l.index
         x_reg_l = pd.concat([x_reg_l, holiday_features['past']], axis=1)
@@ -341,6 +341,8 @@ def _process_features(history, scale_history=False, diff_history=False,
           
         x_reg_l = holiday_features['past']
         x_future_l = holiday_features['future']
+        x_reg_l.index = history_l.index
+        x_future_l.index = dt_span_seq
     
     if len(periods_trig) > 0 and max(periods_trig) > 1:
         
@@ -368,8 +370,9 @@ def _process_features(history, scale_history=False, diff_history=False,
                trig_features_fut_int.reset_index(drop=True)], axis=1)
 
     
-      if x_reg_l is not None and x_future_l is not None:
+      if x_reg is not None and x_future is not None:
 
+        
         trig_seasonality_features['past'].index = x_reg_l.index
         x_reg_l = pd.concat([x_reg_l, trig_seasonality_features['past']],
                             axis=1)
@@ -381,6 +384,8 @@ def _process_features(history, scale_history=False, diff_history=False,
           
         x_reg_l = trig_seasonality_features['past']
         x_future_l = trig_seasonality_features['future']
+        x_reg_l.index = history_l.index
+        x_future_l.index = dt_span_seq
         
   
   if scale_history:
@@ -423,4 +428,5 @@ def _process_features(history, scale_history=False, diff_history=False,
           'dt_span_seq':dt_span_seq, 'period_ts':period_ts,
           'x_reg':x_reg_l, 'x_future':x_future_l,
           'pdq_order':pdq_order, 'seasonal_order':seasonal_order}
+
 
