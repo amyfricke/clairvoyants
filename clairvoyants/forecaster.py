@@ -203,6 +203,9 @@ class Clairvoyant(object):
                       for period in self.periods]
       self.periods_trig = [period / max(self.periods_agg + [1])
                            for period in self.periods_trig]
+      
+    else:
+      self.training['x_features'] = None
    
     return self
 
@@ -242,7 +245,10 @@ class Clairvoyant(object):
       self.forecast['x_features']['unaggregated'] = x_features_crop
       self.forecast['x_features']['aggregated'] = x_aggregated['aggregated']
       self.forecast['x_features']['ensemble'] = x_aggregated['transformed']
-   
+    
+    else:
+      self.forecast['x_features'] = None
+        
     return self    
 
 
