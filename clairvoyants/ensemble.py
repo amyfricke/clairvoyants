@@ -541,6 +541,170 @@ def prophet_linear_lt(history,
           'residuals':model_residuals,
           'attributions':model_attributions}
 
+def prophet_linear_lt2(history,
+                      dt_span,
+                      dt_units='D',
+                      periods=[1],
+                      periods_agg=[7],
+                      periods_trig=[365.25 / 7],
+                      pred_level=0.8,
+                      transform='none',
+                      x_reg=None,
+                      x_future=None,
+                      holidays_df=None,
+                      x_cols_seasonal_interactions=[]):
+  """Function to get prophet model results with linear growth and dampened
+   changepoint sensitivity (better for long-term forecasts).
+   
+  Parameters
+  ----------
+  history: pd dataframe containing the training history of the time series
+      being modelled.
+  dt_span: dict of the forecast begin and end dts
+  dt_units: units of the original input time series
+  periods: seasonal periods (handled using built in seasonality estimation
+      methods intrinsic to each model in the ensemble - e.g. arima methods)
+  periods_agg: seasonal periods that have been aggregated across
+  periods_trig: seasonal periods to fit trigonometric curves (sin + cos) to
+  pred_level: confidence level of the prediction intervals
+  transform: transformation ('log' or 'none') applied to the timeseries being
+     modelled
+  x_reg: pandas dataframe of historical external regressors
+  x_future: pandas dataframe of future values of external regressors
+  holidays_df: pandas dataframe of holidays. Must have dt and holiday column
+  x_cols_seasonal_interactions: list of columns in x_reg/x_future to interact
+    with seasonality and holiday features (n/a for this model)
+  
+  Returns
+  -------
+  Dict containing dataframes for the model coefficients/summary and the 
+   backtransformed forecast."""
+  fcst_interval = int(max(periods_agg + [1]))
+  dt_span_seq = pd.to_datetime(pd.bdate_range(
+      str(dt_span['begin_dt'] + _datetime_delta(fcst_interval - 1, dt_units)),
+      str(dt_span['end_dt']),
+      freq=str(fcst_interval) + dt_units))
+  
+  all_periods = periods + [period * fcst_interval for period in periods_trig]
+  history = history.rename(columns={'dt':'ds', 'actual':'y'})
+  history = history.reset_index()
+  prophet_fcst_df = pd.DataFrame({'ds':dt_span_seq})
+  
+  if holidays_df is not None:
+    holidays_df = holidays_df[['dt', 'holiday']]
+    holidays_df = holidays_df.rename(columns={'dt':'ds'})
+  
+  prophet_model = Prophet(
+      growth='linear',
+      yearly_seasonality=any([period in [364, 365, 365.25] 
+                              for period in all_periods]) * 1,
+      weekly_seasonality=any([period == 7
+                              for period in all_periods]) * 1,
+      holidays=holidays_df,
+      changepoint_prior_scale=0.05,
+      mcmc_samples=300,
+      n_changepoints=int(np.floor(history.shape[0] / 100)),
+      interval_width=pred_level)
+  
+  periods_auto =  [1, 7, 12, 24, 364, 365, 365.25]
+  
+  if any([period not in periods_auto 
+          for period in all_periods]):
+    for period in [period not in periods_auto
+                   for period in all_periods]:
+      prophet_model.add_seasonality('period' + str(period), 
+                                    period, fourier_order=2)
+
+  if x_reg is not None and x_future is not None:
+    for x_reg_col in x_reg.columns:
+      history[x_reg_col] = x_reg.reset_index()[x_reg_col]
+      prophet_fcst_df[x_reg_col] = x_future.reset_index()[x_reg_col]
+      prophet_model.add_regressor(x_reg_col)
+  
+  random.seed(12345)
+  prophet_fit = prophet_model.fit(history)
+  
+  prophet_fcst = prophet_fit.predict(prophet_fcst_df)
+  
+  prophet_fcst_df = pd.DataFrame({'dt':dt_span_seq, 
+                                  'forecast':prophet_fcst['yhat'],
+                                  'forecast_lower':prophet_fcst['yhat_lower'],
+                                  'forecast_upper':prophet_fcst['yhat_upper']})
+  
+  prophet_fitted = prophet_fit.predict(history)
+  
+  model_residuals = pd.DataFrame({'dt':history['ds'],
+                                  'residual':history['y'] - 
+                                    prophet_fitted['yhat']})
+  
+  model_coefficients = regressor_coefficients(prophet_fit)
+  model_coefficients = model_coefficients.append(
+      {'regressor': 'linear_trend', 'regressor_mode':'additive', 'center': 0,
+       'coef_lower': prophet_fcst['trend_lower'][1]
+       - prophet_fcst['trend_lower'][0], 
+       'coef': prophet_fcst['trend'][1] - prophet_fcst['trend'][0], 
+       'coef_upper':prophet_fcst['trend_upper'][1]
+       - prophet_fcst['trend_upper'][0]}, ignore_index = True)
+  
+  if holidays_df is not None:
+    for hday in holidays_df['holiday']:
+      ds_hday = holidays_df['ds'].loc[holidays_df.holiday == hday]
+      ds_hday = [any(ds == ds_h for ds_h in ds_hday) 
+                 for ds in prophet_fitted.ds]
+      model_coefficients = model_coefficients.append(
+          {'regressor':hday, 'regressor_mode':'additive', 'center':0,
+           'coef_lower':np.mean(prophet_fitted[hday + '_lower'][ds_hday]),
+           'coef':np.mean(prophet_fitted[hday][ds_hday]),
+           'coef_upper':np.mean(prophet_fitted[hday + '_upper'][ds_hday])},
+          ignore_index=True)
+  
+  seasonality_dict = prophet_fit.seasonalities
+  if len(seasonality_dict) > 0:
+    i = 0
+    trig_term = 'sin'
+    for seas_name in seasonality_dict:
+      for fo in list(range(
+              1, seasonality_dict[seas_name]['fourier_order'] + 1)):
+        for j in list(range(2)):
+          regressor = seas_name + '_' + trig_term + '_order_' + str(fo)
+          beta = prophet_fit.params['beta'][:, i]
+          coef = beta / prophet_fit.y_scale
+          coef_mean = np.mean(coef)
+          coef_bounds = np.quantile(coef, q=[(1 - pred_level) / 2,
+                                           1 - (1 - pred_level) / 2])
+          model_coefficients = model_coefficients.append(
+              {'regressor':regressor, 'regressor_mode':'additive', 'center':0,
+               'coef_lower':coef_bounds[0], 'coef':coef_mean,
+               'coef_upper':coef_bounds[1]}, ignore_index=True)
+          i += 1
+          trig_term = (i % 2 == 0) * 'sin' + (i % 2 == 1) * 'cos'
+          
+  pi_z = 1 - (1 - pred_level) / 2
+  model_coefficients['se'] = (model_coefficients.coef_upper 
+                              - model_coefficients.coef_lower) / norm.ppf(pi_z)
+  model_attributions = pd.DataFrame()
+  model_attributions['dt'] = history.ds
+  model_attributions['total'] = (
+      history.y - model_residuals.residual)
+  model_attributions['actual'] = history.y
+  
+  for x_col in x_reg.columns:
+    x_col_mask = (model_coefficients.regressor == x_col)
+    x_coef = float(model_coefficients.coef.loc[x_col_mask])
+    x_se = float(model_coefficients.se.loc[x_col_mask])
+    model_attributions[x_col] = x_coef * history[x_col]
+    model_attributions[x_col + '_var'] = x_se ** 2 * history[x_col] ** 2
+
+    
+  prophet_fcst_bcktrans = _back_transform_df(prophet_fcst_df, transform)
+  
+  return {'forecast':prophet_fcst_bcktrans, 
+          'transformed_forecast':prophet_fcst_df,
+          'coefficients':model_coefficients,
+          'summary':None,
+          'residuals':model_residuals,
+          'attributions':model_attributions}
+
 def sarimax_pdq_PDQ(pdq_order,
                     s_pdq_order,
                     history,
