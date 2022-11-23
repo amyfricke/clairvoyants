@@ -200,7 +200,7 @@ def disaggregate_forecast(history,
 
   try:
     arima002_disagg_model = ARIMA(
-        hist.set_index('dt').logit_proportion_aggregated, order=(0, 0, 0),
+        hist.set_index('dt').logit_proportion_aggregated, order=(0, 0, 2),
         exog=hist.set_index('dt')[x_cols + per_dummies + per_interactions],
         freq=str(period_disagg) + dt_units)
   except:
