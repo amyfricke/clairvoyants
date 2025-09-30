@@ -2,9 +2,7 @@ import pytest
 from clairvoyants import aggregation
 import pandas as pd
 
-# Example function to test: suppose aggregation.py has a function called sum_series
-# We'll write a test for it. If it doesn't exist, you can update the test later.
-
+# Testing the aggregation functionality
 
 def test_aggregate_to_longest():
     data = pd.DataFrame({'dt': pd.date_range('2020-01-01',
