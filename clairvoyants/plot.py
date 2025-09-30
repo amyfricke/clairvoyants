@@ -905,6 +905,150 @@ def plot_attributions(a, a_display=None, title=None, ylabel='',
   
   return ap
 
+def plot_attributions3(a, a_display=None, title=None, ylabel='',
+                      conf_level=0.95):
+  """Produce a plot of the attributions
+
+      
+  Returns
+  ----------
+  plt object
+
+  """
+
+  a = a.reset_index(drop=True)
+  if type(a) is not pd.core.frame.DataFrame:
+    raise Exception('a, the attribution dataframe must be pandas.')
+
+  if not set(['dt', 'actual']).issubset(set(a.columns)):
+    raise Exception('a must contain columns "dt" and "actual"')
+    
+  if a_display is None:
+    a_display = {}
+    for col in list(set(a.columns) - set(['dt', 'total'])):
+      a_display[col] = [col]
+      print(a_display)
+   
+  if title is None:
+    title = 'Model predicted attributions of various factors'
+
+  
+  fig, ax = plt.subplots(figsize=(15, 9))
+  fig.suptitle(title, fontsize=24)
+  plt.xlabel('datetime', fontsize=20)
+  plt.ylabel(ylabel, fontsize=20)
+  plt.rc('legend', fontsize=13)
+  plt.rc('ytick', labelsize=18)
+  plt.rc('xtick', labelsize=18)
+  plt.xticks(rotation = 30)
+  ax.yaxis.set_major_formatter(FuncFormatter(human_format))
+
+  a.actual = a.actual + 110
+  dt_series = a.dt.copy()
+  a_upper = a.actual.copy()
+  a_lower = a.actual.copy()
+  a_upper_neg = None
+  a_lower_neg = None
+  a_lower_pos = None
+  a_upper_pos = None
+
+  i = -1
+  for a_key in a_display.keys():
+    i += 1
+    cur_col = custom_color_map[i]
+    a_series = a[a_display[a_key][0]]
+    a_se = a[a_display[a_key][0] + '_var']
+    
+    for a_col in a_display[a_key][1:]:
+      a_series += a[a_col]
+      a_se += a[a_col + '_var']
+    
+    a_se = np.sqrt(a_se)
+    
+    a_pos = (a_series > 0)
+    a_neg = (a_series < 0)
+    
+    if a_pos.sum() > 0:
+      
+      a_nonneg = (a_series >= 0)
+      
+      if a_nonneg.sum() == len(a_series):
+        a_lower.loc[a_pos] = a_lower.loc[a_pos] - a_series.loc[a_pos]
+          
+        ap = plt.fill_between(dt_series, 
+                              a_upper,
+                              a_lower,
+                              label=a_key, alpha=0.5,
+                              color=[cur_col], edgecolor=None)
+      
+        a_upper = a_lower.copy()
+ 
+    if a_neg.sum() > 0:
+
+      if a_upper_neg is None and a_lower_neg is None:
+        a_upper_neg = pd.Series([0] * len(a_series))
+        a_lower_neg = pd.Series([0] * len(a_series))
+        a_lower_neg.loc[a_neg] = a_series.loc[a_neg]
+
+        
+      else:
+        a_lower_neg.loc[a_neg] = a_lower_neg.loc[a_neg] + a_series.loc[a_neg]
+        
+        
+      a_nonpos = (a_series <= 0)
+      if a_nonpos.sum() == len(a_series):
+        
+        ap = plt.fill_between(dt_series, 
+                              a_upper_neg, a_lower_neg,
+                              label=a_key + ' driven', alpha=0.5,
+                              color=[cur_col], edgecolor=None)
+            
+      
+      else:
+        
+        if a_upper_pos is None and a_lower_pos is None:
+          a_upper_pos = pd.Series([0] * len(a_series))
+          a_lower_pos = pd.Series([0] * len(a_series))
+          a_upper_pos.loc[a_pos] = a_series.loc[a_pos]
+          
+        else:
+          a_upper_pos.loc[a_pos] = a_upper_pos.loc[a_pos] + a_series[a_pos]
+         
+        ap = plt.fill_between(dt_series, 
+                              a_upper_pos, a_lower_pos,
+                              label=a_key, alpha=0.5,
+                              color=[cur_col], edgecolor=None)
+                            
+
+        ap = plt.fill_between(dt_series, 
+                              a_upper_neg, a_lower_neg,
+                              color=[cur_col], edgecolor=None,
+                              alpha=0.5)
+                            
+        
+        a_lower_pos = a_upper_pos.copy()
+
+      
+      a_upper_neg = a_lower_neg.copy()
+
+  
+  
+  if a_upper_pos is None:
+    a_lower = [0] * len(a.total)
+  else: 
+    a_lower = a_upper_pos
+
+  
+  ap = plt.fill_between(dt_series, a_lower, a_upper,
+                        color=['grey'],
+                        label = 'other/unknown', alpha=0.35)
+  
+     
+  plt.legend(loc='upper left', ncol=2, framealpha=0.02)
+  plt.grid()
+  
+  return ap
+
 
 def plot_pre_post_actuals_forecast(e, title=None, ylabel='', 
                                    use_aggregated=False,
