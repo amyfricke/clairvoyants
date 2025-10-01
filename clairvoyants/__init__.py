@@ -6,6 +6,7 @@
 # of patent rights can be found in the PATENTS file in the same directory.
 
 from clairvoyants.forecaster import Clairvoyant
+from clairvoyants import ensemble
 
 __version__ = '0.0.1'
 
