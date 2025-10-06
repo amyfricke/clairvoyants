@@ -8,3 +8,4 @@ prophet>=1.0.1,<2.0.0
 scikit-learn>=1.0.0,<2.0.0
 pandasql>=0.7.3
 python-dateutil>=2.8.1
+SQLAlchemy>=1.4,<2.0
