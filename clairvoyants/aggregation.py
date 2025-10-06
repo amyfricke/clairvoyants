@@ -6,7 +6,6 @@
 
 import numpy as np
 import pandas as pd
-import pandasql as psql
 
 def validate_parameters(periods_agg=[7],
                         agg_fun=['sum'],
@@ -76,20 +75,31 @@ def aggregate_to_longest(history,
 
     period_str = 'period' + str(period)
     
-    unaggregated_history['n_rows'] = 1
+    # Create grouping variable for aggregation
     unaggregated_history['p_n'] = np.repeat(
         range(int(np.ceil(unaggregated_history.shape[0] / period_m))),
         period_m)[range(unaggregated_history.shape[0])]
     
-    query_str = """SELECT p_n, max(dt) AS dt, sum(n_rows) AS n_rows,"""
-    query_str_l = [fun + """(""" + col + """) AS """ + col 
-                   for fun, col in zip(agg_fun, cols_agg)]
-    query_str += """, """.join(query_str_l) + """ FROM unaggregated_history"""
-    query_str += """ GROUP BY 1 ORDER BY 2"""
-
-    rslt = psql.sqldf(query_str)
-    rslt = rslt[rslt['n_rows'] == period_m]
-    aggregated_history = rslt.drop(['p_n', 'n_rows'], axis=1)
+    # Use pandas groupby instead of SQL
+    agg_dict = {'dt': 'max'}
+    for fun, col in zip(agg_fun, cols_agg):
+      if fun == 'sum':
+        agg_dict[col] = 'sum'
+      elif fun == 'avg':
+        agg_dict[col] = 'mean'
+      elif fun == 'min':
+        agg_dict[col] = 'min'
+      elif fun == 'max':
+        agg_dict[col] = 'max'
+      elif fun == 'median':
+        agg_dict[col] = 'median'
+    
+    # Group and aggregate
+    rslt = unaggregated_history.groupby('p_n').agg(agg_dict).reset_index()
+    
+    # Filter to complete periods only
+    rslt = rslt[rslt['p_n'].map(unaggregated_history.groupby('p_n').size()) == period_m]
+    aggregated_history = rslt.drop(['p_n'], axis=1)
     aggregated_history['dt'] = pd.to_datetime(aggregated_history['dt'])
     
     period_str = 'period' + str(period)
