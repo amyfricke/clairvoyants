@@ -2,6 +2,11 @@
 # -*- coding: utf-8 -*-
 import setuptools
 
+def parse_requirements(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        lines = [ln.strip() for ln in f.readlines()]
+    return [ln for ln in lines if ln and not ln.startswith("#")]
+
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
@@ -24,5 +29,6 @@ setuptools.setup(
     #package_dir={"": "clairvoyants"},
     #packages=setuptools.find_packages(where="clairvoyants"),
     packages=["clairvoyants"],
+    install_requires=parse_requirements("requirements.txt"),
     python_requires=">=3.6",
 )
