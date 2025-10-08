@@ -230,11 +230,6 @@ pip install -e .  # If installing from source
 - Ensure your DataFrame has 'dt' and 'actual' columns
 - Check that datetime column is properly formatted
 
-### Performance Tips
-
-- **Large datasets**: Use fewer models or reduce training window
-- **Slow convergence**: Increase `max_iter` in neural network models
-- **Memory issues**: Process data in chunks or reduce feature set
 
 ## Contributing
 
