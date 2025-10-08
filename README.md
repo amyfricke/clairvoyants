@@ -188,7 +188,7 @@ clair.fit_ensemble(df, x_features=features)
 clair.disaggregate_forecasts(x_features_col_subset=['marketing_spend'])
 
 # Get daily forecast
-daily_forecast = clair.forecast['disaggregated']['period1']
+daily_forecast = clair.forecast['disaggregated']['period7']
 ```
 
 ## Data Requirements
@@ -230,11 +230,6 @@ pip install -e .  # If installing from source
 - Ensure your DataFrame has 'dt' and 'actual' columns
 - Check that datetime column is properly formatted
 
-### Performance Tips
-
-- **Large datasets**: Use fewer models or reduce training window
-- **Slow convergence**: Increase `max_iter` in neural network models
-- **Memory issues**: Process data in chunks or reduce feature set
 
 ## Contributing
 
