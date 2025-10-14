@@ -111,8 +111,7 @@ def get_trig_seasonality_features(history_len,
   and forecast periods."""
   
   trig_seasonality_features = pd.DataFrame()
-  trig_seasonality_features['idx'] = list(
-      range(1, history_len + fcst_len + 1))
+  trig_seasonality_features['idx'] = range(1, history_len + fcst_len + 1)
   for period in periods_trig:
 
     period_index = trig_seasonality_features['idx'] % period
@@ -170,16 +169,16 @@ def _get_ar_diff_order(history, period_ts, len_fcst, dt_span_seq,
 
   col_ts = 'actual' + scale_history * '_scaled'
   
-  auto_sarimax_model = auto_arima(history[col_ts], X=x_reg.to_numpy(),
+  auto_sarimax_model = auto_arima(history[col_ts], X=x_reg.to_numpy() if x_reg is not None else None,
       max_P=max_P * auto_create_lags, max_p=max_p * auto_create_lags,
       stationary=(not diff_history), max_d=max_d * diff_history, max_D=1,
       with_intercept=True, max_q=0, start_q=0, max_Q=0, start_Q=0,
       method='bfgs', stepwise=False, m=period_ts, 
-      start_p=int(auto_create_lags), d=int(diff_history), D=0,
+      start_p=int(auto_create_lags), start_P=int(auto_create_lags), d=int(diff_history), D=0,
       max_order=max_p + max_d)
   
   auto_sarimax_fcst = auto_sarimax_model.predict(
-      len_fcst, X=x_future.to_numpy(), 
+      len_fcst, X=x_future.to_numpy() if x_future is not None else None, 
       return_conf_int=True)
   
   auto_sarimax_fcst_df = pd.DataFrame(

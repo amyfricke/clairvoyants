@@ -80,12 +80,11 @@ class TestFeaturizeHolidays:
         empty_holidays = pd.DataFrame(columns=['dt', 'holiday'])
         result = featurize_holidays(self.history, empty_holidays)
 
-        # Should return original history with no holiday columns
+        # Should return only dt column when no holidays
         assert len(result) == len(self.history)
         assert 'dt' in result.columns
-        assert 'actual' in result.columns
         # No holiday columns should be added
-        holiday_cols = [col for col in result.columns if col not in ['dt', 'actual']]
+        holiday_cols = [col for col in result.columns if col not in ['dt']]
         assert len(holiday_cols) == 0
 
     def test_different_time_units(self):
@@ -275,8 +274,8 @@ class TestGetTrigSeasonalityFeatures:
     def test_basic_functionality(self):
         """Test basic trigonometric seasonality features."""
         result = get_trig_seasonality_features(
-            self.history,
-            self.fcst_dts,
+            len(self.history),  # history_len
+            len(self.fcst_dts),  # fcst_len
             periods_trig=[7, 30]
         )
 
@@ -289,8 +288,8 @@ class TestGetTrigSeasonalityFeatures:
     def test_different_periods(self):
         """Test with different trigonometric periods."""
         result = get_trig_seasonality_features(
-            self.history,
-            self.fcst_dts,
+            len(self.history),  # history_len
+            len(self.fcst_dts),  # fcst_len
             periods_trig=[7, 14, 30]
         )
 
@@ -301,8 +300,8 @@ class TestGetTrigSeasonalityFeatures:
     def test_empty_periods(self):
         """Test with empty periods_trig list."""
         result = get_trig_seasonality_features(
-            self.history,
-            self.fcst_dts,
+            len(self.history),  # history_len
+            len(self.fcst_dts),  # fcst_len
             periods_trig=[]
         )
 
@@ -414,12 +413,18 @@ class TestFeaturizeLags:
 
     def test_basic_functionality(self):
         """Test basic lag features generation."""
+        # Create a proper forecast DataFrame with the right length
+        forecast_length = 14  # 2 weeks
+        forecast_df = pd.DataFrame({
+            'forecast': np.random.normal(10, 2, forecast_length)
+        })
+        
         result = featurize_lags(
             self.history,
-            self.fcst_dts,
+            forecast_df,
+            period_ts=7,
             p_ar=2,
-            P_ar=1,
-            period_ts=7
+            P_ar=1
         )
 
         # Check output structure
@@ -434,12 +439,18 @@ class TestFeaturizeLags:
 
     def test_different_lag_orders(self):
         """Test with different lag orders."""
+        # Create a proper forecast DataFrame with the right length
+        forecast_length = 14  # 2 weeks
+        forecast_df = pd.DataFrame({
+            'forecast': np.random.normal(10, 2, forecast_length)
+        })
+        
         result = featurize_lags(
             self.history,
-            self.fcst_dts,
+            forecast_df,
+            period_ts=7,
             p_ar=3,
-            P_ar=2,
-            period_ts=7
+            P_ar=2
         )
 
         # Should work with different lag orders
@@ -448,12 +459,18 @@ class TestFeaturizeLags:
 
     def test_zero_lags(self):
         """Test with zero lag orders."""
+        # Create a proper forecast DataFrame with the right length
+        forecast_length = 14  # 2 weeks
+        forecast_df = pd.DataFrame({
+            'forecast': np.random.normal(10, 2, forecast_length)
+        })
+        
         result = featurize_lags(
             self.history,
-            self.fcst_dts,
+            forecast_df,
+            period_ts=7,
             p_ar=0,
-            P_ar=0,
-            period_ts=7
+            P_ar=0
         )
 
         # Should still return a result

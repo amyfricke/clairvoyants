@@ -47,7 +47,7 @@ def test_ensemble_forecasting_moderate():
       ensemble.sarimax_003_001], transform='none',
       periods_trig=[], holidays_df=holidays_df)
     clair.fit_ensemble(df=tutoring_subscribers, x_features=tutoring_features,
-    training_end_dt=datetime(2022, 1, 10),vforecast_end_dt=datetime(2022, 9, 14),)
+    training_end_dt=datetime(2022, 1, 10),forecast_end_dt=datetime(2022, 9, 14),)
 
     # Check that consensus forecast is produced
     consensus = clair.forecast['consensus']
