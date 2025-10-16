@@ -113,6 +113,20 @@ clair = Clairvoyant(
 clair.fit_ensemble(df)
 ```
 
+### Parallel Ensemble Fitting
+
+For improved performance with multiple models, you can enable parallel fitting:
+
+```python
+# Enable parallel fitting (default: True)
+clair.fit_ensemble(df, parallel=True)
+
+# Disable parallel fitting for debugging or single-threaded environments
+clair.fit_ensemble(df, parallel=False)
+```
+
+**Note**: Parallel fitting is most beneficial with multiple models and larger datasets. For single models or very small datasets, sequential fitting may be faster due to thread overhead.
+
 ## API Reference
 
 ### Clairvoyant Class
@@ -133,9 +147,17 @@ The main forecasting class that orchestrates ensemble modeling.
 
 #### Methods
 
-- `fit_ensemble(df, x_features=None, training_begin_dt=None, training_end_dt=None, forecast_end_dt=None)`: Fit ensemble models
+- `fit_ensemble(df, x_features=None, training_begin_dt=None, training_end_dt=None, forecast_end_dt=None, parallel=True)`: Fit ensemble models
 - `disaggregate_forecasts(x_features_col_subset=None)`: Disaggregate to original granularity
 - `get_out_of_time_validation(df)`: Calculate validation metrics
+
+**fit_ensemble Parameters:**
+- `df`: Time series DataFrame with 'dt' and 'actual' columns
+- `x_features`: External regressors DataFrame (optional)
+- `training_begin_dt`: Start of training period (optional)
+- `training_end_dt`: End of training period (optional)
+- `forecast_end_dt`: End of forecast period (optional)
+- `parallel`: Whether to fit models in parallel (default: True)
 
 ### Available Models
 
