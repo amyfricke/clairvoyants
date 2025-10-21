@@ -10,19 +10,20 @@ from clairvoyants.featurize import (
     featurize_lags,
     _process_features
 )
-from clairvoyants.ensemble import sarimax_111_011 # For _process_features test
+
 
 class TestFeaturizeHolidays:
     """Test cases for featurize_holidays function."""
-
+    
     def setup_method(self):
         """Set up test data before each test method."""
+        # Create sample history data
         self.history = pd.DataFrame({
             'dt': pd.date_range('2022-01-01', periods=30, freq='D'),
             'actual': np.random.normal(10, 2, 30)
         })
-
-        # Create holidays dataframe with holidays that fall within the history period
+        
+        # Create holidays dataframe
         self.holidays_df = pd.DataFrame({
             'dt': [
                 datetime(2022, 1, 1),   # New Year
@@ -39,92 +40,112 @@ class TestFeaturizeHolidays:
                 'Valentine'
             ]
         })
-
+    
+    def test_basic_functionality(self):
+        """Test basic holiday featurization."""
+        result = featurize_holidays(self.history, self.holidays_df)
+        
+        # Check output structure
+        assert isinstance(result, pd.DataFrame)
+        assert 'dt' in result.columns
+        assert len(result) == len(self.history)
+        
+        # Check that holiday columns are created
+        expected_holidays = ['New Year', 'MLK Day', 'Valentine']
+        for holiday in expected_holidays:
+            assert holiday in result.columns
+        
+        # Check that values are binary (0 or 1)
+        for holiday in expected_holidays:
+            assert all(result[holiday].isin([0, 1]))
+    
     def test_holiday_detection(self):
         """Test that holidays are correctly detected."""
         result = featurize_holidays(self.history, self.holidays_df)
-
+        
         # New Year should be detected on 2022-01-01
         new_year_row = result[result['dt'] == datetime(2022, 1, 1)]
         assert len(new_year_row) == 1
         assert new_year_row['New Year'].iloc[0] == 1
-
+        
         # MLK Day should be detected on 2022-01-15
         mlk_row = result[result['dt'] == datetime(2022, 1, 15)]
         assert len(mlk_row) == 1
         assert mlk_row['MLK Day'].iloc[0] == 1
-
+        
         # Valentine's Day should be detected on 2022-01-14
         valentine_row = result[result['dt'] == datetime(2022, 1, 14)]
         assert len(valentine_row) == 1
         assert valentine_row['Valentine'].iloc[0] == 1
-
+        
         # Non-holiday dates should have 0 for all holidays
         non_holiday_row = result[result['dt'] == datetime(2022, 1, 10)]
         assert len(non_holiday_row) == 1
         assert non_holiday_row['New Year'].iloc[0] == 0
         assert non_holiday_row['MLK Day'].iloc[0] == 0
         assert non_holiday_row['Valentine'].iloc[0] == 0
-
+    
     def test_duplicate_holidays(self):
-        """Test that duplicate holidays are handled correctly."""
+        """Test handling of duplicate holidays."""
         result = featurize_holidays(self.history, self.holidays_df)
-
-        # New Year should still be detected (duplicates should be handled)
-        new_year_row = result[result['dt'] == datetime(2022, 1, 1)]
-        assert len(new_year_row) == 1
-        assert new_year_row['New Year'].iloc[0] == 1
-
+        
+        # Should handle duplicates correctly
+        new_year_count = result['New Year'].sum()
+        assert new_year_count == 1  # Only one New Year in the history period
+        
+        valentine_count = result['Valentine'].sum()
+        assert valentine_count == 1  # Only one Valentine's Day in the history period
+    
     def test_empty_holidays_df(self):
         """Test with empty holidays dataframe."""
         empty_holidays = pd.DataFrame(columns=['dt', 'holiday'])
         result = featurize_holidays(self.history, empty_holidays)
-
-        # Should return only dt column when no holidays
-        assert len(result) == len(self.history)
+        
+        # Should return only dt column
+        assert len(result.columns) == 1
         assert 'dt' in result.columns
-        # No holiday columns should be added
-        holiday_cols = [col for col in result.columns if col not in ['dt']]
-        assert len(holiday_cols) == 0
-
-    def test_different_time_units(self):
-        """Test with different time units."""
-        hourly_history = pd.DataFrame({
-            'dt': pd.date_range('2022-01-01', periods=48, freq='H'),
-            'actual': np.random.normal(10, 2, 48)
+        assert len(result) == len(self.history)
+    
+    def test_no_matching_holidays(self):
+        """Test when no holidays match the history dates."""
+        future_holidays = pd.DataFrame({
+            'dt': [datetime(2023, 1, 1)],
+            'holiday': ['Future Holiday']
         })
-
-        hourly_holidays = pd.DataFrame({
-            'dt': [datetime(2022, 1, 1, 12)],  # Noon on New Year
-            'holiday': ['New Year']
-        })
-
-        result = featurize_holidays(hourly_history, hourly_holidays)
-
-        # Should work with hourly data
-        assert len(result) == len(hourly_history)
-        assert 'New Year' in result.columns
+        result = featurize_holidays(self.history, future_holidays)
+        
+        # Should create holiday column with all zeros
+        assert 'Future Holiday' in result.columns
+        assert result['Future Holiday'].sum() == 0
+    
+    def test_data_integrity(self):
+        """Test that input data is not modified."""
+        original_history = self.history.copy()
+        original_holidays = self.holidays_df.copy()
+        
+        featurize_holidays(self.history, self.holidays_df)
+        
+        # Check that original dataframes are unchanged
+        pd.testing.assert_frame_equal(original_history, self.history)
+        pd.testing.assert_frame_equal(original_holidays, self.holidays_df)
 
 
 class TestGetHolidayFeatures:
     """Test cases for get_holiday_features function."""
-
+    
     def setup_method(self):
         """Set up test data before each test method."""
         self.history_start = datetime(2022, 1, 1)
-        
-        # Create forecast date span
         self.fcst_dts = {
             'begin_dt': datetime(2022, 2, 1),
-            'end_dt': datetime(2022, 2, 28)
+            'end_dt': datetime(2022, 2, 14)
         }
-
-        # Create holidays dataframe
+        
         self.holidays_df = pd.DataFrame({
             'dt': [
-                datetime(2022, 1, 1),   # New Year (before forecast)
-                datetime(2022, 2, 14),  # Valentine's Day (in forecast)
-                datetime(2022, 2, 21)   # President's Day (in forecast)
+                datetime(2022, 1, 1),   # New Year
+                datetime(2022, 2, 14),  # Valentine's Day
+                datetime(2022, 2, 21)   # President's Day
             ],
             'holiday': [
                 'New Year',
@@ -132,7 +153,7 @@ class TestGetHolidayFeatures:
                 'Presidents Day'
             ]
         })
-
+    
     def test_basic_functionality(self):
         """Test basic holiday features generation."""
         result = get_holiday_features(
@@ -258,61 +279,115 @@ class TestGetHolidayFeatures:
 
 class TestGetTrigSeasonalityFeatures:
     """Test cases for get_trig_seasonality_features function."""
-
-    def setup_method(self):
-        """Set up test data before each test method."""
-        self.history = pd.DataFrame({
-            'dt': pd.date_range('2022-01-01', periods=30, freq='D'),
-            'actual': np.random.normal(10, 2, 30)
-        })
-
-        self.fcst_dts = {
-            'begin_dt': datetime(2022, 2, 1),
-            'end_dt': datetime(2022, 2, 14)
-        }
-
+    
     def test_basic_functionality(self):
         """Test basic trigonometric seasonality features."""
+        history_len = 100
+        fcst_len = 14
+        periods_trig = [7, 30, 365]
+        
         result = get_trig_seasonality_features(
-            len(self.history),  # history_len
-            len(self.fcst_dts),  # fcst_len
-            periods_trig=[7, 30]
+            history_len,
+            fcst_len,
+            periods_trig
         )
-
+        
         # Check output structure
         assert isinstance(result, dict)
         assert 'future' in result
-        assert isinstance(result['future'], pd.DataFrame)
-        assert len(result['future']) > 0
-
+        
+        # Check that trigonometric features are created
+        expected_cols = []
+        for period in periods_trig:
+            expected_cols.extend([f'sin_period{period}', f'cos_period{period}'])
+        
+        for col in expected_cols:
+            assert col in result['future'].columns
+    
+    def test_trigonometric_values(self):
+        """Test that trigonometric values are correct."""
+        history_len = 30
+        fcst_len = 7
+        periods_trig = [7]
+        
+        result = get_trig_seasonality_features(
+            history_len,
+            fcst_len,
+            periods_trig
+        )
+        
+        # Check that sin and cos values are in expected range
+        sin_col = 'sin_period7'
+        cos_col = 'cos_period7'
+        
+        assert all(result['future'][sin_col] >= -1)
+        assert all(result['future'][sin_col] <= 1)
+        assert all(result['future'][cos_col] >= -1)
+        assert all(result['future'][cos_col] <= 1)
+        
+        # Check that sin^2 + cos^2 = 1 (approximately)
+        trig_sum = result['future'][sin_col]**2 + result['future'][cos_col]**2
+        assert all(np.abs(trig_sum - 1) < 1e-10)
+    
     def test_different_periods(self):
-        """Test with different trigonometric periods."""
+        """Test with different seasonal periods."""
+        history_len = 50
+        fcst_len = 14
+        periods_trig = [7, 14, 30, 365]
+        
         result = get_trig_seasonality_features(
-            len(self.history),  # history_len
-            len(self.fcst_dts),  # fcst_len
-            periods_trig=[7, 14, 30]
+            history_len,
+            fcst_len,
+            periods_trig
         )
-
-        # Should work with multiple periods
-        assert isinstance(result, dict)
-        assert 'future' in result
-
-    def test_empty_periods(self):
+        
+        # Should create features for all periods
+        expected_cols = []
+        for period in periods_trig:
+            expected_cols.extend([f'sin_period{period}', f'cos_period{period}'])
+        
+        for col in expected_cols:
+            assert col in result['future'].columns
+    
+    def test_different_forecast_lengths(self):
+        """Test with different forecast lengths."""
+        history_len = 168  # 1 week of hours
+        fcst_len = 48  # 2 days
+        periods_trig = [24, 168]  # Daily and weekly seasonality
+        
+        result = get_trig_seasonality_features(
+            history_len,
+            fcst_len,
+            periods_trig
+        )
+        
+        # Should work with different lengths
+        assert len(result['future']) == fcst_len
+        assert 'sin_period24' in result['future'].columns
+        assert 'cos_period24' in result['future'].columns
+        assert 'sin_period168' in result['future'].columns
+        assert 'cos_period168' in result['future'].columns
+    
+    def test_empty_periods_trig(self):
         """Test with empty periods_trig list."""
+        history_len = 30
+        fcst_len = 7
+        periods_trig = []
+        
         result = get_trig_seasonality_features(
-            len(self.history),  # history_len
-            len(self.fcst_dts),  # fcst_len
-            periods_trig=[]
+            history_len,
+            fcst_len,
+            periods_trig
         )
-
-        # Should still return a result
-        assert isinstance(result, dict)
-        assert 'future' in result
+        
+        # Should return empty dataframes
+        assert len(result['future']) == fcst_len
+        assert len(result['future'].columns) == 0
 
 
 class TestGetArDiffOrder:
     """Test cases for _get_ar_diff_order function."""
-
+    
     def test_basic_functionality(self):
         """Test basic AR diff order calculation."""
         history = pd.DataFrame({
@@ -398,103 +473,169 @@ class TestGetArDiffOrder:
 
 class TestFeaturizeLags:
     """Test cases for featurize_lags function."""
-
+    
     def setup_method(self):
         """Set up test data before each test method."""
         self.history = pd.DataFrame({
-            'dt': pd.date_range('2022-01-01', periods=30, freq='D'),
-            'actual': np.random.normal(10, 2, 30)
+            'dt': pd.date_range('2022-01-01', periods=100, freq='D'),
+            'actual': np.random.normal(10, 2, 100)
         })
-
-        self.fcst_dts = {
-            'begin_dt': datetime(2022, 2, 1),
-            'end_dt': datetime(2022, 2, 14)
-        }
-
+        
+        self.forecast = pd.DataFrame({
+            'dt': pd.date_range('2022-02-01', periods=14, freq='D'),
+            'forecast': np.random.normal(10, 2, 14)
+        })
+    
     def test_basic_functionality(self):
-        """Test basic lag features generation."""
-        # Create a proper forecast DataFrame with the right length
-        forecast_length = 14  # 2 weeks
-        forecast_df = pd.DataFrame({
-            'forecast': np.random.normal(10, 2, forecast_length)
-        })
+        """Test basic lag featurization."""
+        period_ts = 7
+        p_ar = 1
+        P_ar = 0
         
         result = featurize_lags(
             self.history,
-            forecast_df,
-            period_ts=7,
-            p_ar=2,
-            P_ar=1
+            self.forecast,
+            period_ts,
+            scale_history=False,
+            diff_history=False,
+            p_ar=p_ar,
+            P_ar=P_ar
         )
-
+        
         # Check output structure
         assert isinstance(result, dict)
         assert 'x_future' in result
-        assert isinstance(result['x_future'], pd.DataFrame)
-        assert len(result['x_future']) > 0
-
-        # Check for lag columns
-        lag_cols = [col for col in result['x_future'].columns if 'actual_lag' in col]
-        assert len(lag_cols) > 0
-
-    def test_different_lag_orders(self):
-        """Test with different lag orders."""
-        # Create a proper forecast DataFrame with the right length
-        forecast_length = 14  # 2 weeks
-        forecast_df = pd.DataFrame({
-            'forecast': np.random.normal(10, 2, forecast_length)
-        })
+        
+        # Check that lag features are created
+        expected_lag_cols = [f'actual_lag{i}' for i in range(1, p_ar + 1)]
+        for col in expected_lag_cols:
+            assert col in result['x_future'].columns
+    
+    def test_different_p_ar_orders(self):
+        """Test with different p_ar orders."""
+        period_ts = 7
+        
+        for p_ar in [1, 2, 3]:
+            result = featurize_lags(
+                self.history,
+                self.forecast,
+                period_ts,
+                scale_history=False,
+                diff_history=False,
+                p_ar=p_ar,
+                P_ar=0
+            )
+            
+            # Should create lag features based on p_ar
+            expected_lag_cols = [f'actual_lag{i}' for i in range(1, p_ar + 1)]
+            for col in expected_lag_cols:
+                assert col in result['x_future'].columns
+    
+    def test_different_periods(self):
+        """Test with different period_ts values."""
+        p_ar = 1
+        P_ar = 0
+        
+        for period_ts in [1, 7, 14, 30]:
+            result = featurize_lags(
+                self.history,
+                self.forecast,
+                period_ts,
+                scale_history=False,
+                diff_history=False,
+                p_ar=p_ar,
+                P_ar=P_ar
+            )
+            
+            # Should work with different periods
+            assert isinstance(result, dict)
+            assert 'x_future' in result
+    
+    def test_lag_values(self):
+        """Test that lag values are correct."""
+        period_ts = 7
+        p_ar = 2
+        P_ar = 0
         
         result = featurize_lags(
             self.history,
-            forecast_df,
-            period_ts=7,
-            p_ar=3,
-            P_ar=2
+            self.forecast,
+            period_ts,
+            scale_history=False,
+            diff_history=False,
+            p_ar=p_ar,
+            P_ar=P_ar
         )
-
-        # Should work with different lag orders
-        assert isinstance(result, dict)
-        assert 'x_future' in result
-
-    def test_zero_lags(self):
-        """Test with zero lag orders."""
-        # Create a proper forecast DataFrame with the right length
-        forecast_length = 14  # 2 weeks
-        forecast_df = pd.DataFrame({
-            'forecast': np.random.normal(10, 2, forecast_length)
-        })
+        
+        # Check that lag_1 and lag_2 are created
+        assert 'actual_lag1' in result['x_future'].columns
+        assert 'actual_lag2' in result['x_future'].columns
+        
+        # Check that lag values are reasonable
+        assert not result['x_future']['actual_lag1'].isna().all()
+        assert not result['x_future']['actual_lag2'].isna().all()
+    
+    def test_forecast_length(self):
+        """Test that forecast length is preserved."""
+        period_ts = 7
+        p_ar = 1
+        P_ar = 0
         
         result = featurize_lags(
             self.history,
-            forecast_df,
-            period_ts=7,
-            p_ar=0,
+            self.forecast,
+            period_ts,
+            scale_history=False,
+            diff_history=False,
+            p_ar=p_ar,
+            P_ar=P_ar
+        )
+        
+        # Should preserve forecast length
+        assert len(result['x_future']) == len(self.forecast)
+    
+    def test_data_integrity(self):
+        """Test that input data is not modified."""
+        original_history = self.history.copy()
+        original_forecast = self.forecast.copy()
+        
+        featurize_lags(
+            self.history,
+            self.forecast,
+            7,
+            scale_history=False,
+            diff_history=False,
+            p_ar=1,
             P_ar=0
         )
-
-        # Should still return a result
-        assert isinstance(result, dict)
-        assert 'x_future' in result
+        
+        # Check that original dataframes are unchanged
+        pd.testing.assert_frame_equal(original_history, self.history)
+        pd.testing.assert_frame_equal(original_forecast, self.forecast)
 
 
 class TestProcessFeatures:
     """Test cases for _process_features function."""
-
+    
     def setup_method(self):
         """Set up test data before each test method."""
         self.history = pd.DataFrame({
-            'dt': pd.date_range('2022-01-01', periods=30, freq='D'),
-            'actual': np.random.normal(10, 2, 30)
+            'dt': pd.date_range('2022-01-01', periods=100, freq='D'),
+            'actual': np.random.normal(10, 2, 100)
         })
-
+        
+        self.forecast = pd.DataFrame({
+            'dt': pd.date_range('2022-02-01', periods=14, freq='D'),
+            'forecast': np.random.normal(10, 2, 14)
+        })
+    
     def test_basic_functionality(self):
         """Test basic feature processing."""
         dt_span = {
             'begin_dt': datetime(2022, 2, 1),
             'end_dt': datetime(2022, 2, 14)
         }
-
+        
         result = _process_features(
             self.history,
             scale_history=False,
@@ -505,19 +646,21 @@ class TestProcessFeatures:
             periods_agg=[7],
             periods_trig=[365.25/7]
         )
-
+        
         # Check output structure
         assert isinstance(result, dict)
         assert 'history' in result
+        
+        # Check that history is a DataFrame
         assert isinstance(result['history'], pd.DataFrame)
-
+    
     def test_with_scaling(self):
         """Test feature processing with scaling."""
         dt_span = {
             'begin_dt': datetime(2022, 2, 1),
             'end_dt': datetime(2022, 2, 14)
         }
-
+        
         result = _process_features(
             self.history,
             scale_history=True,
@@ -528,18 +671,18 @@ class TestProcessFeatures:
             periods_agg=[7],
             periods_trig=[365.25/7]
         )
-
+        
         # Should work with scaling
         assert isinstance(result, dict)
         assert 'history' in result
-
+    
     def test_with_differencing(self):
         """Test feature processing with differencing."""
         dt_span = {
             'begin_dt': datetime(2022, 2, 1),
             'end_dt': datetime(2022, 2, 14)
         }
-
+        
         result = _process_features(
             self.history,
             scale_history=False,
@@ -550,18 +693,18 @@ class TestProcessFeatures:
             periods_agg=[7],
             periods_trig=[365.25/7]
         )
-
+        
         # Should work with differencing
         assert isinstance(result, dict)
         assert 'history' in result
-
+    
     def test_with_both_scaling_and_differencing(self):
         """Test feature processing with both scaling and differencing."""
         dt_span = {
             'begin_dt': datetime(2022, 2, 1),
             'end_dt': datetime(2022, 2, 14)
         }
-
+        
         result = _process_features(
             self.history,
             scale_history=True,
@@ -572,7 +715,81 @@ class TestProcessFeatures:
             periods_agg=[7],
             periods_trig=[365.25/7]
         )
-
+        
         # Should work with both scaling and differencing
         assert isinstance(result, dict)
         assert 'history' in result
+    
+    def test_different_periods(self):
+        """Test with different periods."""
+        dt_span = {
+            'begin_dt': datetime(2022, 2, 1),
+            'end_dt': datetime(2022, 2, 14)
+        }
+        
+        for periods_agg in [[7], [14], [30]]:
+            result = _process_features(
+                self.history,
+                scale_history=False,
+                diff_history=False,
+                dt_span=dt_span,
+                dt_units='D',
+                periods=[],
+                periods_agg=periods_agg,
+                periods_trig=[365.25/7]
+            )
+            
+            # Should work with different periods
+            assert isinstance(result, dict)
+            assert 'history' in result
+    
+    def test_different_time_units(self):
+        """Test with different time units."""
+        # Create hourly data
+        hourly_history = pd.DataFrame({
+            'dt': pd.date_range('2022-01-01', periods=168, freq='H'),
+            'actual': np.random.normal(10, 2, 168)
+        })
+        
+        dt_span = {
+            'begin_dt': datetime(2022, 1, 8),
+            'end_dt': datetime(2022, 1, 10)
+        }
+        
+        result = _process_features(
+            hourly_history,
+            scale_history=False,
+            diff_history=False,
+            dt_span=dt_span,
+            dt_units='H',
+            periods=[],
+            periods_agg=[24],  # Daily period
+            periods_trig=[168]  # Weekly period
+        )
+        
+        # Should work with hourly data
+        assert isinstance(result, dict)
+        assert 'history' in result
+    
+    def test_data_integrity(self):
+        """Test that input data is not modified."""
+        original_history = self.history.copy()
+        
+        dt_span = {
+            'begin_dt': datetime(2022, 2, 1),
+            'end_dt': datetime(2022, 2, 14)
+        }
+        
+        _process_features(
+            self.history,
+            scale_history=False,
+            diff_history=False,
+            dt_span=dt_span,
+            dt_units='D',
+            periods=[],
+            periods_agg=[7],
+            periods_trig=[365.25/7]
+        )
+        
+        # Check that original dataframe is unchanged
+        pd.testing.assert_frame_equal(original_history, self.history)
