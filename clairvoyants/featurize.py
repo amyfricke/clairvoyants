@@ -111,8 +111,7 @@ def get_trig_seasonality_features(history_len,
   and forecast periods."""
   
   trig_seasonality_features = pd.DataFrame()
-  trig_seasonality_features['idx'] = list(
-      range(1, history_len + fcst_len + 1))
+  trig_seasonality_features['idx'] = range(1, history_len + fcst_len + 1)
   for period in periods_trig:
 
     period_index = trig_seasonality_features['idx'] % period

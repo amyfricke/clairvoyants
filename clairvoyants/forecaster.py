@@ -11,6 +11,8 @@ from clairvoyants.utilities import _aggregate_and_transform, _datetime_delta, _g
 import numpy as np
 import pandas as pd
 from re import search
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import functools
 
 class Clairvoyant(object):
   """Clairvoyant ensemble forecaster.
@@ -306,11 +308,28 @@ class Clairvoyant(object):
                                       cols_transform=cols_att)
     return consensus_df
    
+  def _fit_single_model(self, model, model_str, x_features_training, 
+                        x_features_forecast, x_cols_seasonal_interactions):
+    """Helper function to fit a single model in the ensemble."""
+    model_rslts = model(
+        self.training['transformed'], self.forecast['dt_span'],
+        self.dt_units, self.periods, self.periods_agg, self.periods_trig,
+        self.pred_level, self.transform, 
+        x_features_training, 
+        x_features_forecast,
+        self.holidays_df,
+        x_cols_seasonal_interactions)
+    
+    return {
+        'model_str': model_str,
+        'model_rslts': model_rslts
+    }
 
   def fit_ensemble(self, df, x_features=None,
                    training_begin_dt=None, training_end_dt=None,
                    forecast_end_dt=None,
-                   x_cols_seasonal_interactions=[]):
+                   x_cols_seasonal_interactions=[],
+                   parallel=True):
     """Fit the specified ensemble of models and generate forecasts. Find 
       consensus forecast
     
@@ -322,7 +341,13 @@ class Clairvoyant(object):
         external regressors to be used in fitting the ensemble
     training_begin_dt: the desired begin dt of the training history
     training_end_dt: the desired end dt of the training history
-    forecast_end_dt: the desired end dt of the forecast period 
+    forecast_end_dt: the desired end dt of the forecast period
+    x_cols_seasonal_interactions: list of columns in x_features to interact
+        with seasonality and holiday features
+    parallel: bool, default True
+        Whether to fit ensemble models in parallel. When True and multiple
+        models are present, models will be fitted concurrently using 
+        ThreadPoolExecutor for improved performance.
         
     Returns
     ----------
@@ -366,35 +391,76 @@ class Clairvoyant(object):
       x_features_forecast = self.forecast['x_features'][
               'ensemble'].set_index('dt')
     
-    for model in self.models:
-      model_str = str(model.__name__)  
-      model_rslts = model(
-          self.training['transformed'], self.forecast['dt_span'],
-          self.dt_units, self.periods, self.periods_agg, self.periods_trig,
-          self.pred_level, self.transform, 
-          x_features_training, 
-          x_features_forecast,
-          self.holidays_df,
-          x_cols_seasonal_interactions)
+    if parallel and len(self.models) > 1:
+      # Parallel execution
+      with ThreadPoolExecutor(max_workers=min(len(self.models), 4)) as executor:
+        # Submit all model fitting tasks
+        future_to_model = {
+          executor.submit(
+            self._fit_single_model, 
+            model, 
+            str(model.__name__), 
+            x_features_training, 
+            x_features_forecast, 
+            x_cols_seasonal_interactions
+          ): model for model in self.models
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_model):
+          result = future.result()
+          model_str = result['model_str']
+          model_rslts = result['model_rslts']
+          
+          self.forecast['ensemble'][model_str] = (
+              model_rslts['forecast'])
+          self.ensemble_model_artifacts['coefficients'][model_str] = (
+              model_rslts['coefficients'])
+          self.ensemble_model_artifacts['summary'][model_str] = (
+              model_rslts['summary'])
+          self.ensemble_model_artifacts['residuals'][model_str] = (
+              model_rslts['residuals'])
+          self.ensemble_model_artifacts['attributions'][model_str] = (
+              model_rslts['attributions'])
+          model_df = model_rslts['transformed_forecast']
+          model_df['model'] = model_str
+          ensemble_df = pd.concat([ensemble_df, model_df], ignore_index=True)
+          
+          if model_rslts['attributions'] is not None:
+            ensemble_att_df = pd.concat([ensemble_att_df,
+                                         model_rslts['attributions']],
+                                        ignore_index=True)
+    else:
+      # Sequential execution (original behavior)
+      for model in self.models:
+        model_str = str(model.__name__)  
+        model_rslts = model(
+            self.training['transformed'], self.forecast['dt_span'],
+            self.dt_units, self.periods, self.periods_agg, self.periods_trig,
+            self.pred_level, self.transform, 
+            x_features_training, 
+            x_features_forecast,
+            self.holidays_df,
+            x_cols_seasonal_interactions)
 
-      self.forecast['ensemble'][model_str] = (
-          model_rslts['forecast'])
-      self.ensemble_model_artifacts['coefficients'][model_str] = (
-          model_rslts['coefficients'])
-      self.ensemble_model_artifacts['summary'][model_str] = (
-          model_rslts['summary'])
-      self.ensemble_model_artifacts['residuals'][model_str] = (
-          model_rslts['residuals'])
-      self.ensemble_model_artifacts['attributions'][model_str] = (
-          model_rslts['attributions'])
-      model_df = model_rslts['transformed_forecast']
-      model_df['model'] = model_str
-      ensemble_df = pd.concat([ensemble_df, model_df], ignore_index=True)
-      
-      if model_rslts['attributions'] is not None:
-        ensemble_att_df = pd.concat([ensemble_att_df,
-                                     model_rslts['attributions']],
-                                    ignore_index=True)
+        self.forecast['ensemble'][model_str] = (
+            model_rslts['forecast'])
+        self.ensemble_model_artifacts['coefficients'][model_str] = (
+            model_rslts['coefficients'])
+        self.ensemble_model_artifacts['summary'][model_str] = (
+            model_rslts['summary'])
+        self.ensemble_model_artifacts['residuals'][model_str] = (
+            model_rslts['residuals'])
+        self.ensemble_model_artifacts['attributions'][model_str] = (
+            model_rslts['attributions'])
+        model_df = model_rslts['transformed_forecast']
+        model_df['model'] = model_str
+        ensemble_df = pd.concat([ensemble_df, model_df], ignore_index=True)
+        
+        if model_rslts['attributions'] is not None:
+          ensemble_att_df = pd.concat([ensemble_att_df,
+                                       model_rslts['attributions']],
+                                      ignore_index=True)
       
     self.forecast['consensus'] = self.get_consensus_forecast(
         ensemble_df, self.consensus_method, self.transform)  
