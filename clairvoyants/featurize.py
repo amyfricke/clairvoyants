@@ -317,17 +317,28 @@ def _process_features(history, scale_history=False, diff_history=False,
                                               dt_units, periods_agg) 
       
       if len(x_cols_seasonal_interactions) > 0:
+        # Create lists to store interaction features
+        past_interactions = []
+        future_interactions = []
+        
         for x_col in x_cols_seasonal_interactions:
           holiday_features_past_inter = holiday_features['past'].multiply(
               x_reg_l[x_col], axis=0).add_suffix('_x_' + x_col)
-          holiday_features['past'] = pd.concat(
-              [holiday_features['past'].reset_index(drop=True),
-               holiday_features_past_inter.reset_index(drop=True)], axis=1)
+          past_interactions.append(holiday_features_past_inter)
+          
           holiday_features_fut_inter = holiday_features['future'].multiply(
               x_future_l[x_col], axis=0).add_suffix('_x_' + x_col)
+          future_interactions.append(holiday_features_fut_inter)
+        
+        # Concatenate all interactions at once
+        if past_interactions:
+          holiday_features['past'] = pd.concat(
+              [holiday_features['past'].reset_index(drop=True)] + 
+              [inter.reset_index(drop=True) for inter in past_interactions], axis=1)
+        if future_interactions:
           holiday_features['future'] = pd.concat(
-              [holiday_features['future'].reset_index(drop=True),
-               holiday_features_fut_inter.reset_index(drop=True)], axis=1)
+              [holiday_features['future'].reset_index(drop=True)] + 
+              [inter.reset_index(drop=True) for inter in future_interactions], axis=1)
       
       if (x_reg is not None and x_future is not None):
             
