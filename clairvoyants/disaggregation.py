@@ -198,15 +198,23 @@ def disaggregate_forecast(history,
   else:
     x_cols = []
 
+  # Filter to only include columns that actually exist in the hist DataFrame
+  available_columns = hist.set_index('dt').columns
+  per_dummies_available = [col for col in per_dummies if col in available_columns]
+  per_interactions_available = [col for col in per_interactions if col in available_columns]
+  
+  # Combine all available columns
+  all_exog_columns = x_cols + per_dummies_available + per_interactions_available
+
   try:
     arima002_disagg_model = ARIMA(
         hist.set_index('dt').logit_proportion_aggregated, order=(0, 0, 2),
-        exog=hist.set_index('dt')[x_cols + per_dummies + per_interactions],
+        exog=hist.set_index('dt')[all_exog_columns],
         freq=str(period_disagg) + dt_units)
   except:
     arima002_disagg_model = ARIMA(
         hist.set_index('dt').logit_proportion_aggregated, order=(0, 0, 0),
-        exog=hist.set_index('dt')[x_cols + per_dummies + per_interactions],
+        exog=hist.set_index('dt')[all_exog_columns],
         freq=str(period_disagg) + dt_units)
   
   arima002_disagg_fit = arima002_disagg_model.fit()
@@ -220,9 +228,17 @@ def disaggregate_forecast(history,
 
   disagg_model_coefficients['regressor'] = disagg_model_coefficients.index
   
+  # Filter forecast columns to only include those that exist
+  available_fcst_columns = fcst.set_index('dt').columns
+  per_dummies_fcst_available = [col for col in per_dummies if col in available_fcst_columns]
+  per_interactions_fcst_available = [col for col in per_interactions if col in available_fcst_columns]
+  
+  # Combine all available forecast columns
+  all_fcst_exog_columns = x_cols + per_dummies_fcst_available + per_interactions_fcst_available
+  
   disagg_fcst = arima002_disagg_fit.get_forecast(
       len(forecast_dates_disaggregated), 
-      exog=fcst.set_index('dt')[x_cols + per_dummies + per_interactions])
+      exog=fcst.set_index('dt')[all_fcst_exog_columns])
   
   disagg_fcst_df = pd.DataFrame({'forecast':disagg_fcst.predicted_mean})
 
